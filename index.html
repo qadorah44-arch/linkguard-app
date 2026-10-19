@@ -85,32 +85,10 @@ function brandHit(host,r){
   }
   return null}
 
-
-raw = (raw || "").trim();
-
-if (!raw) {
-  return bad("Paste one link to check.");
-}
-
-const foundLinks = raw.match(/https?:\/\/[^\s<>"']+/gi) || [];
-
-if (foundLinks.length > 1) {
-  return bad("Multiple links detected. Check each link separately.");
-}
-
-if (/\s/.test(raw)) {
-  if (
-    foundLinks.length === 1 &&
-    raw.replace(foundLinks[0], "").trim() === ""
-  ) {
-    raw = foundLinks[0];
-  } else {
-    return bad("Paste one link only, without extra text.");
-  }
-}
-
-raw = raw.replace(/[)\].,;!?'"”’>]+$/, "");
-  
+function analyze(raw){
+  raw=(raw||"").trim();
+  if(/\s/.test(raw)){const m=raw.match(/https?:\/\/\S+/i)||raw.match(/\b(?:www\.|[a-z0-9-]+\.[a-z]{2,}\/)\S*/i);raw=m?m[0]:raw.split(/\s+/)[0]}
+  raw=raw.replace(/[)\].,;!?'"”’>]+$/,"");
   if(!raw)return bad("Paste a link to check.");
   const sm=raw.match(/^([a-z][a-z0-9+.-]*):/i);
   if(sm&&!/^[a-z0-9.-]+:\d+(\/|$)/i.test(raw)){
@@ -156,12 +134,7 @@ raw = raw.replace(/[)\].,;!?'"”’>]+$/, "");
   return{score,verdict,domain:r,reasons:reasons.length?reasons:["No warning signs found. This is an estimate, not a guarantee."]};
 }
 
-const label = {
-  safe: "No obvious warning signs",
-  suspicious: "Suspicious — be careful",
-  danger: "High risk — do not open",
-  invalid: "Unable to check"
-};
+const label={safe:"Low risk",suspicious:"Suspicious",danger:"Dangerous",invalid:"Can’t check this"};
 function run(){
   const v=$("u").value;
   $("out").style.display="block";
