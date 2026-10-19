@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LinkGuard</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0d4f6c">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+:root{--bg:#eef2f5;--ink:#10202b;--mute:#566673;--card:#fff;--line:#d3dce3;--safe:#1d8a5b;--warn:#a87400;--bad:#c8372d;--accent:#0d4f6c;--btn:#fff;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1a22;--ink:#e8f0f5;--mute:#93a6b3;--card:#15262f;--line:#27404d;--safe:#3cc48a;--warn:#e8b030;--bad:#ff6a5e;--accent:#5cc0e8;--btn:#08202b}}
+:root[data-theme="dark"]{--bg:#0e1a22;--ink:#e8f0f5;--mute:#93a6b3;--card:#15262f;--line:#27404d;--safe:#3cc48a;--warn:#e8b030;--bad:#ff6a5e;--accent:#5cc0e8;--btn:#08202b}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Trebuchet MS",system-ui,sans-serif}
+main{max-width:620px;margin:0 auto;padding:28px 18px 48px}
+h1{font:700 2rem/1.1 Georgia,serif;margin:0 0 6px}
+p.lead{color:var(--mute);margin:0 0 22px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input{flex:1 1 240px;min-width:0;padding:13px 14px;border:2px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit}
+input:focus,button:focus-visible,.samples button:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+#go{padding:13px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--btn);font:700 1rem "Trebuchet MS",system-ui,sans-serif;cursor:pointer}
+.samples{margin:14px 0 0;color:var(--mute);font-size:.92rem}
+.samples button{background:none;border:0;padding:6px 4px;margin-right:8px;color:var(--accent);font:inherit;text-decoration:underline;cursor:pointer}
+#out{margin-top:26px;display:none}
+.meter{height:16px;border-radius:8px;background:linear-gradient(90deg,var(--safe) 0 20%,var(--warn) 20% 50%,var(--bad) 50% 100%);position:relative}
+.pin{position:absolute;top:-6px;width:6px;height:28px;border-radius:3px;background:var(--ink);transition:left .5s ease;left:0}
+.verdict{font:700 1.6rem Georgia,serif;margin:18px 0 2px}
+.safe{color:var(--safe)}.suspicious{color:var(--warn)}.danger{color:var(--bad)}
+ul{padding-left:20px;margin:10px 0 0}li{margin:6px 0}
+.dom{color:var(--mute);margin:0}
+.note{margin-top:30px;color:var(--mute);font-size:.85rem}
+@media(prefers-reduced-motion:reduce){.pin{transition:none}}
+</style></head><body><main>
+<h1>LinkGuard</h1>
+<p class="lead">Paste a link before you tap it. We check it for phishing and scam signs.</p>
+<div class="row">
+<input id="u" type="text" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="https://example.com/..." aria-label="Link to check">
+<button id="go">Check link</button></div>
+<div class="samples">Try:
+<button data-u="https://www.google.com/search?q=hello">safe link</button>
+<button data-u="http://paypa1-secure-login.xyz/verify/account">fake PayPal</button>
+<button data-u="http://192.168.4.7/sbi-kyc-update">IP address</button></div>
+<section id="out" aria-live="polite">
+<div class="meter"><div class="pin" id="pin"></div></div>
+<div class="verdict" id="v"></div>
+<p class="dom" id="d"></p>
+<ul id="r"></ul></section>
+<p class="note">Your link is checked on this device and is never sent anywhere.</p>
+</main>
+<script>
+const BRANDS=["google","paypal","amazon","apple","microsoft","facebook","instagram","whatsapp","netflix","sbi","hdfc","icici","paytm","irctc"];
+const OFFICIAL={google:["google.com","google.co.in","goo.gl"],sbi:["sbi.co.in","onlinesbi.sbi","sbi.com"],whatsapp:["whatsapp.com","whatsapp.net"],facebook:["facebook.com","fb.com"],apple:["apple.com","icloud.com"],microsoft:["microsoft.com","live.com","office.com"]};
+const RISKY=["zip","xyz","top","tk","click","gq","ml","cf","work","rest","country","icu"];
+const SHORT=["bit.ly","tinyurl.com","t.co","goo.gl","is.gd","cutt.ly","rb.gy","shorturl.at"];
+const WORDS=["login","signin","verify","secure","account","update","bank","free","gift","prize","password","wallet","confirm","otp","kyc"];
+const SLD=["co","com","org","net","gov","ac","edu"];
+const LEET={"0":"o","1":"l","3":"e","4":"a","5":"s","7":"t","$":"s"};
+const $=id=>document.getElementById(id);
+
+function reg(host){const p=host.split(".");
+  if(p.length>=3&&SLD.includes(p[p.length-2])&&p[p.length-1].length===2)return p.slice(-3).join(".");
+  return p.slice(-2).join(".")}
+const isIP=h=>/^\d{1,3}(\.\d{1,3}){3}$/.test(h)||h.includes(":");
+const dec=s=>{try{return decodeURIComponent(s)}catch(e){return s}};
+
+function analyze(raw){
+  raw=raw.trim();
+  if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw))raw="http://"+raw;
+  let u;try{u=new URL(raw)}catch(e){return{verdict:"invalid",score:0,reasons:["That doesn’t look like a valid link."]}}
+  const host=u.hostname.toLowerCase().replace(/^\[|\]$/g,"");
+  if(!host||(!host.includes(".")&&!isIP(host)))return{verdict:"invalid",score:0,reasons:["That doesn’t look like a valid link."]};
+  const full=dec(raw).toLowerCase(),R=[],add=(p,t)=>R.push([p,t]);
+  const tld=host.split(".").pop(),r=reg(host);
+  if(u.protocol!=="https:")add(10,"Not encrypted: the link uses http instead of https.");
+  if(isIP(host))add(30,"Uses a raw IP address instead of a website name.");
+  if(u.username||u.password)add(25,"Contains ‘@’, which can hide the real destination.");
+  if(raw.length>75)add(10,"Unusually long link.");
+  if((host.match(/\./g)||[]).length>=4)add(10,"Many nested subdomains, a common disguise trick.");
+  if((host.match(/-/g)||[]).length>=2)add(10,"Several hyphens in the domain name.");
+  if(host.startsWith("xn--")||host.includes(".xn--"))add(25,"Uses look-alike international characters (punycode).");
+  if(RISKY.includes(tld))add(15,"Domain ending ."+tld+" is often used in abuse.");
+  if(SHORT.includes(r))add(15,"Shortened link: the real destination is hidden.");
+  if((raw.match(/%[0-9a-f]{2}/gi)||[]).length>3)add(10,"Heavily encoded characters in the link.");
+  const hits=WORDS.filter(k=>full.includes(k));
+  if(hits.length)add(Math.min(8*hits.length,24),"Pressure words in the link: "+hits.slice(0,4).join(", ")+".");
+  const norm=host.replace(/[013457$]/g,c=>LEET[c]||c);
+  for(const b of BRANDS){
+    const ok=OFFICIAL[b]||[b+".com",b+".in",b+".co.in"];
+    if(norm.includes(b)&&!ok.includes(r)){
+      add(35,"Domain "+(host.includes(b)?"uses the name of":"imitates")+" ‘"+b+"’ but belongs to "+r+".");break}
+  }
+  const score=Math.min(R.reduce((s,x)=>s+x[0],0),100);
+  const verdict=score>=50?"danger":score>=20?"suspicious":"safe";
+  const reasons=R.sort((a,b)=>b[0]-a[0]).map(x=>x[1]);
+  return{score,verdict,domain:r,reasons:reasons.length?reasons:["No warning signs found. Still be careful with unknown senders."]};
+}
+
+const label={safe:"Looks safe",suspicious:"Suspicious",danger:"Dangerous",invalid:"Not a link"};
+function run(){
+  const v=$("u").value;
+  $("out").style.display="block";
+  if(!v.trim()){$("v").textContent="Paste a link to check.";$("v").className="verdict";$("r").innerHTML="";$("d").textContent="";return}
+  const d=analyze(v);
+  $("v").textContent=label[d.verdict]+(d.verdict==="invalid"?"":" ("+d.score+"/100)");
+  $("v").className="verdict "+d.verdict;
+  $("d").textContent=d.domain?"Website: "+d.domain:"";
+  $("r").innerHTML="";
+  d.reasons.forEach(t=>{const li=document.createElement("li");li.textContent=t;$("r").appendChild(li)});
+  $("pin").style.left="calc("+d.score+"% - 3px)";
+}
+$("go").onclick=run;
+$("u").onkeydown=e=>{if(e.key==="Enter")run()};
+document.querySelectorAll(".samples button").forEach(b=>b.onclick=()=>{$("u").value=b.dataset.u;run()});
+
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+const q=new URLSearchParams(location.search);
+const shared=q.get("url")||(q.get("text")||"").match(/https?:\/\/\S+/)?.[0]||q.get("text");
+if(shared){$("u").value=shared;run()}
+</script></body></html>
