@@ -47,61 +47,97 @@ ul{padding-left:20px;margin:10px 0 0}li{margin:6px 0}
 <div class="verdict" id="v"></div>
 <p class="dom" id="d"></p>
 <ul id="r"></ul></section>
-<p class="note">Your link is checked on this device and is never sent anywhere.</p>
+<p class="note">Checked on this device; your link is never sent anywhere. This is a risk estimate, not a guarantee. It can’t see the page itself, so stay careful with unknown senders.</p>
 </main>
 <script>
-const BRANDS=["google","paypal","amazon","apple","microsoft","facebook","instagram","whatsapp","netflix","sbi","hdfc","icici","paytm","irctc"];
-const OFFICIAL={google:["google.com","google.co.in","goo.gl"],sbi:["sbi.co.in","onlinesbi.sbi","sbi.com"],whatsapp:["whatsapp.com","whatsapp.net"],facebook:["facebook.com","fb.com"],apple:["apple.com","icloud.com"],microsoft:["microsoft.com","live.com","office.com"]};
-const RISKY=["zip","xyz","top","tk","click","gq","ml","cf","work","rest","country","icu"];
-const SHORT=["bit.ly","tinyurl.com","t.co","goo.gl","is.gd","cutt.ly","rb.gy","shorturl.at"];
-const WORDS=["login","signin","verify","secure","account","update","bank","free","gift","prize","password","wallet","confirm","otp","kyc"];
+const BRANDS=["google","paypal","amazon","apple","microsoft","facebook","instagram","whatsapp","netflix","youtube","linkedin","telegram","flipkart","phonepe","paytm","gpay","airtel","jio","sbi","onlinesbi","hdfc","hdfcbank","icici","icicibank","axis","axisbank","kotak","pnb","irctc","uidai","aadhaar","epfo","incometax","fedex","dhl","dtdc","binance","coinbase"];
+const OFFICIAL={google:["google.com","google.co.in","goo.gl","gmail.com","googleapis.com","gstatic.com","googleusercontent.com","youtube.com"],youtube:["youtube.com","youtu.be"],gpay:["google.com"],sbi:["sbi.co.in","onlinesbi.sbi","sbi.com","onlinesbi.com"],onlinesbi:["onlinesbi.sbi","onlinesbi.com"],whatsapp:["whatsapp.com","whatsapp.net","wa.me"],facebook:["facebook.com","fb.com","fb.me"],instagram:["instagram.com","cdninstagram.com"],apple:["apple.com","icloud.com"],microsoft:["microsoft.com","live.com","office.com","outlook.com","microsoftonline.com"],amazon:["amazon.com","amazon.in","amazon.co.uk","amazon.de","amazonaws.com"],hdfc:["hdfcbank.com","hdfc.com"],hdfcbank:["hdfcbank.com"],icici:["icicibank.com","icici.com"],icicibank:["icicibank.com"],axis:["axisbank.com"],axisbank:["axisbank.com"],kotak:["kotak.com"],pnb:["pnbindia.in"],telegram:["telegram.org","t.me"],linkedin:["linkedin.com","lnkd.in"],netflix:["netflix.com","nflxvideo.net"],paytm:["paytm.com"],phonepe:["phonepe.com"],irctc:["irctc.co.in"],uidai:["uidai.gov.in"],aadhaar:["uidai.gov.in"],epfo:["epfindia.gov.in","epfo.gov.in"],incometax:["incometax.gov.in","incometaxindia.gov.in"],airtel:["airtel.in","airtel.com"],jio:["jio.com"]};
+const officialFor=b=>OFFICIAL[b]||[b+".com",b+".in",b+".co.in"];
+const isOfficial=r=>BRANDS.some(b=>officialFor(b).includes(r));
+const RISKY=["zip","xyz","top","tk","click","gq","ml","cf","work","rest","country","icu","buzz","cyou","monster","cam","loan","bid","win"];
+const SHORT=["bit.ly","tinyurl.com","t.co","goo.gl","is.gd","cutt.ly","rb.gy","shorturl.at","ow.ly","buff.ly","tiny.cc","s.id","v.gd","lnkd.in","rebrand.ly","t.ly","bl.ink","adf.ly","shorte.st"];
+const FREEHOST=["github.io","netlify.app","pages.dev","workers.dev","vercel.app","web.app","firebaseapp.com","glitch.me","herokuapp.com","ngrok.io","ngrok-free.app","trycloudflare.com","blogspot.com","weebly.com","wixsite.com","000webhostapp.com","notion.site","carrd.co","linktr.ee","forms.gle","docs.google.com","sites.google.com","drive.google.com"];
+const WORDS=["login","signin","verify","secure","account","update","bank","free","gift","prize","password","wallet","confirm","otp","kyc","claim","reward","lottery","winner","refund","suspend","blocked","urgent","recharge","cashback","aadhaar","aadhar","unlock","helpdesk","customer-care"];
+const BADFILE=/\.(apk|xapk|exe|msi|scr|bat|cmd|jar|vbs|ps1)$/i,ARCHIVE=/\.(zip|rar|7z|iso|dmg)$/i;
 const SLD=["co","com","org","net","gov","ac","edu"];
 const LEET={"0":"o","1":"l","3":"e","4":"a","5":"s","7":"t","$":"s"};
 const $=id=>document.getElementById(id);
+const bad=m=>({verdict:"invalid",score:0,reasons:[m]});
 
 function reg(host){const p=host.split(".");
   if(p.length>=3&&SLD.includes(p[p.length-2])&&p[p.length-1].length===2)return p.slice(-3).join(".");
   return p.slice(-2).join(".")}
 const isIP=h=>/^\d{1,3}(\.\d{1,3}){3}$/.test(h)||h.includes(":");
 const dec=s=>{try{return decodeURIComponent(s)}catch(e){return s}};
+const onList=(h,l)=>l.some(d=>h===d||h.endsWith("."+d));
+function lev(a,b){const m=[...Array(a.length+1)].map((_,i)=>[i]);for(let j=1;j<=b.length;j++)m[0][j]=j;
+  for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)m[i][j]=Math.min(m[i-1][j]+1,m[i][j-1]+1,m[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return m[a.length][b.length]}
+function brandHit(host,r){
+  const norm=host.replace(/rn/g,"m").replace(/vv/g,"w").replace(/[013457$]/g,c=>LEET[c]);
+  const toks=norm.split(/[.\-_]/).filter(Boolean);
+  for(const b of BRANDS){
+    if(officialFor(b).includes(r))continue;
+    for(const t of toks){
+      if(t===b||(b.length>=6&&t.includes(b)))return[b,"uses the name of"];
+      if(b.length>=6&&t.length>=6&&Math.abs(t.length-b.length)<=1&&lev(t,b)===1)return[b,"imitates"];
+    }
+  }
+  return null}
 
 function analyze(raw){
-  raw=raw.trim();
+  raw=(raw||"").trim();
+  if(/\s/.test(raw)){const m=raw.match(/https?:\/\/\S+/i)||raw.match(/\b(?:www\.|[a-z0-9-]+\.[a-z]{2,}\/)\S*/i);raw=m?m[0]:raw.split(/\s+/)[0]}
+  raw=raw.replace(/[)\].,;!?'"”’>]+$/,"");
+  if(!raw)return bad("Paste a link to check.");
+  const sm=raw.match(/^([a-z][a-z0-9+.-]*):/i);
+  if(sm&&!/^[a-z0-9.-]+:\d+(\/|$)/i.test(raw)){
+    const s=sm[1].toLowerCase();
+    if(["javascript","data","vbscript","blob","file"].includes(s))return{score:100,verdict:"danger",domain:"",reasons:["‘"+s+":’ is not a website. It can run hidden code or open files on your device. Do not open it."]};
+    if(["mailto","tel","sms"].includes(s))return bad("This is not a web link, so there is nothing to scan.");
+    if(["upi","intent","market","tg","whatsapp"].includes(s))return{score:40,verdict:"suspicious",domain:"",reasons:["This link opens another app directly (payments or installs). Only open it if you started the action yourself."]};
+  }
+  const R=[],add=(p,t)=>R.push([p,t]);
+  if(raw.length>2048){raw=raw.slice(0,2048);add(10,"Extremely long link (over 2,000 characters).")}
   if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw))raw="http://"+raw;
-  let u;try{u=new URL(raw)}catch(e){return{verdict:"invalid",score:0,reasons:["That doesn’t look like a valid link."]}}
-  const host=u.hostname.toLowerCase().replace(/^\[|\]$/g,"");
-  if(!host||(!host.includes(".")&&!isIP(host)))return{verdict:"invalid",score:0,reasons:["That doesn’t look like a valid link."]};
-  const full=dec(raw).toLowerCase(),R=[],add=(p,t)=>R.push([p,t]);
-  const tld=host.split(".").pop(),r=reg(host);
-  if(u.protocol!=="https:")add(10,"Not encrypted: the link uses http instead of https.");
-  if(isIP(host))add(30,"Uses a raw IP address instead of a website name.");
+  let u;try{u=new URL(raw)}catch(e){return bad("That doesn’t look like a valid link.")}
+  const rawHost=raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i,"").split(/[\/?#]/)[0].split("@").pop().replace(/:\d+$/,"").toLowerCase().replace(/\.+$/,"");
+  const host=u.hostname.toLowerCase().replace(/^\[|\]$/g,"").replace(/\.+$/,"");
+  if(!host||(!host.includes(".")&&!isIP(host)))return bad("That doesn’t look like a valid link.");
+  const full=dec(raw).toLowerCase(),tld=host.split(".").pop(),r=reg(host),off=isOfficial(r);
+  if(u.protocol!=="https:")add(10,"Not encrypted: the link uses "+u.protocol.replace(":","")+" instead of https.");
+  if(isIP(host)){add(30,"Uses a raw IP address instead of a website name.");
+    if(!host.includes(":")&&rawHost!==host)add(20,"The IP address is written in a disguised form.")}
   if(u.username||u.password)add(25,"Contains ‘@’, which can hide the real destination.");
+  if(u.port&&!["80","443"].includes(u.port))add(10,"Uses an unusual port number (:"+u.port+").");
   if(raw.length>75)add(10,"Unusually long link.");
   if((host.match(/\./g)||[]).length>=4)add(10,"Many nested subdomains, a common disguise trick.");
   if((host.match(/-/g)||[]).length>=2)add(10,"Several hyphens in the domain name.");
   if(host.startsWith("xn--")||host.includes(".xn--"))add(25,"Uses look-alike international characters (punycode).");
   if(RISKY.includes(tld))add(15,"Domain ending ."+tld+" is often used in abuse.");
-  if(SHORT.includes(r))add(15,"Shortened link: the real destination is hidden.");
+  if(SHORT.includes(r))add(25,"Shortened link: the real destination is hidden. Treat it as unsafe until you know who sent it.");
+  if(onList(host,FREEHOST)&&!off)add(15,"Hosted on a free service that anyone can use. Check who sent you this link.");
   if((raw.match(/%[0-9a-f]{2}/gi)||[]).length>3)add(10,"Heavily encoded characters in the link.");
-  const hits=WORDS.filter(k=>full.includes(k));
-  if(hits.length)add(Math.min(8*hits.length,24),"Pressure words in the link: "+hits.slice(0,4).join(", ")+".");
-  const norm=host.replace(/[013457$]/g,c=>LEET[c]||c);
-  for(const b of BRANDS){
-    const ok=OFFICIAL[b]||[b+".com",b+".in",b+".co.in"];
-    if(norm.includes(b)&&!ok.includes(r)){
-      add(35,"Domain "+(host.includes(b)?"uses the name of":"imitates")+" ‘"+b+"’ but belongs to "+r+".");break}
-  }
+  const tail=dec(u.pathname+u.search+u.hash);
+  if(/https?:\/\/|https?%3a/i.test(tail))add(20,"Contains another link inside it, which may redirect you elsewhere.");
+  if(BADFILE.test(u.pathname))add(30,"Downloads a program file that can install malware.");
+  else if(ARCHIVE.test(u.pathname))add(15,"Downloads a compressed or disk file.");
+  if(!off){const hits=WORDS.filter(k=>full.includes(k));
+    if(hits.length)add(Math.min(8*hits.length,24),"Pressure words in the link: "+hits.slice(0,4).join(", ")+".")}
+  const bh=brandHit(host,r);
+  if(bh)add(50,"Domain "+bh[1]+" ‘"+bh[0]+"’ but belongs to "+r+".");
+  else{const pl=tail.toLowerCase(),b=BRANDS.find(b=>b.length>=5&&pl.includes(b)&&!officialFor(b).includes(r));
+    if(b&&!off)add(12,"Mentions ‘"+b+"’ in the link, but the website is "+r+".")}
   const score=Math.min(R.reduce((s,x)=>s+x[0],0),100);
   const verdict=score>=50?"danger":score>=20?"suspicious":"safe";
   const reasons=R.sort((a,b)=>b[0]-a[0]).map(x=>x[1]);
-  return{score,verdict,domain:r,reasons:reasons.length?reasons:["No warning signs found. Still be careful with unknown senders."]};
+  return{score,verdict,domain:r,reasons:reasons.length?reasons:["No warning signs found. This is an estimate, not a guarantee."]};
 }
 
-const label={safe:"Looks safe",suspicious:"Suspicious",danger:"Dangerous",invalid:"Not a link"};
+const label={safe:"Low risk",suspicious:"Suspicious",danger:"Dangerous",invalid:"Can’t check this"};
 function run(){
   const v=$("u").value;
   $("out").style.display="block";
-  if(!v.trim()){$("v").textContent="Paste a link to check.";$("v").className="verdict";$("r").innerHTML="";$("d").textContent="";return}
   const d=analyze(v);
   $("v").textContent=label[d.verdict]+(d.verdict==="invalid"?"":" ("+d.score+"/100)");
   $("v").className="verdict "+d.verdict;
