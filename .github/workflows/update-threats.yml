@@ -18,6 +18,8 @@ jobs:
           python-version: "3.12"
       - name: Fetch URLhaus feed
         run: python scripts/update_threats.py
+        env:
+          ABUSECH_KEY: ${{ secrets.ABUSECH_KEY }}
       - name: Commit changes
         run: |
           git config user.name "linkguard-bot"
