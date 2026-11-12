@@ -1,8 +1,8 @@
-import json, re, sys, urllib.request
+import json, os, re, sys, urllib.request
 from datetime import date
 from urllib.parse import urlparse
 
-FEED = "https://urlhaus.abuse.ch/downloads/text_recent/"
+API = "https://urlhaus-api.abuse.ch/v1/urls/recent/limit/1000/"
 OUT = "threats.json"
 
 SHARED = {
@@ -21,15 +21,25 @@ def is_shared(host):
     return any(".".join(parts[i:]) in SHARED for i in range(len(parts) - 1))
 
 
+def fetch(key):
+    req = urllib.request.Request(API, headers={"Auth-Key": key, "User-Agent": "LinkGuard-updater"})
+    return json.load(urllib.request.urlopen(req, timeout=60))
+
+
 def main():
-    req = urllib.request.Request(FEED, headers={"User-Agent": "LinkGuard-updater"})
-    text = urllib.request.urlopen(req, timeout=60).read().decode("utf-8", "ignore")
+    key = os.environ.get("ABUSECH_KEY", "").strip()
+    if not key:
+        sys.exit("المفتاح ABUSECH_KEY غير موجود")
+
+    data = fetch(key)
+    if data.get("query_status") != "ok":
+        sys.exit("رد غير متوقع من URLhaus: " + str(data.get("query_status")))
+
     domains, ips = set(), set()
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+    for item in data.get("urls", []):
+        if item.get("url_status") != "online":
             continue
-        host = (urlparse(line).hostname or "").lower()
+        host = (item.get("host") or urlparse(item.get("url", "")).hostname or "").lower()
         if not host:
             continue
         if IP.match(host):
@@ -37,17 +47,18 @@ def main():
         elif not is_shared(host):
             domains.add(host)
 
-    if len(domains) + len(ips) < 50:
+    if len(domains) + len(ips) < 20:
         sys.exit("القائمة المحمّلة صغيرة بشكل مريب، تم الإلغاء")
 
     with open(OUT, encoding="utf-8") as f:
         db = json.load(f)
+    old_d, old_i = set(db.get("blockedDomains", [])), set(db.get("blockedIPs", []))
     db["version"] = date.today().isoformat()
-    db["blockedDomains"] = sorted(domains)
-    db["blockedIPs"] = sorted(ips)
+    db["blockedDomains"] = sorted(old_d | domains)
+    db["blockedIPs"] = sorted(old_i | ips)
     with open(OUT, "w", encoding="utf-8") as f:
         json.dump(db, f, ensure_ascii=False, indent=2)
-    print(f"domains={len(domains)} ips={len(ips)}")
+    print(f"new domains={len(domains)} new ips={len(ips)} total={len(db['blockedDomains'])}+{len(db['blockedIPs'])}")
 
 
 if __name__ == "__main__":
