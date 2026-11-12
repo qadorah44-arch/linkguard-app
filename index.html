@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -41,13 +42,14 @@ ul{padding-left:20px;margin:10px 0 0}li{margin:6px 0}
 <div class="samples">Try:
 <button data-u="https://www.google.com/search?q=hello">safe link</button>
 <button data-u="http://paypa1-secure-login.xyz/verify/account">fake PayPal</button>
-<button data-u="http://192.168.4.7/sbi-kyc-update">IP address</button></div>
+<button data-u="http://192.168.4.7/sbi-kyc-update">IP address</button>
+<button data-u="http://u1.saunatriceps.shop/a.mp3">malware database</button></div>
 <section id="out" aria-live="polite">
 <div class="meter"><div class="pin" id="pin"></div></div>
 <div class="verdict" id="v"></div>
 <p class="dom" id="d"></p>
 <ul id="r"></ul></section>
-<p class="note">Checked on this device; your link is never sent anywhere. This is a risk estimate, not a guarantee. It can’t see the page itself, so stay careful with unknown senders.</p>
+<p class="note">Checked on this device against a database of known malware sites (abuse.ch URLhaus); your link is never sent anywhere. This is a risk estimate, not a guarantee. It can’t see the page itself, so stay careful with unknown senders.</p>
 </main>
 <script>
 const BRANDS=["google","paypal","amazon","apple","microsoft","facebook","instagram","whatsapp","netflix","youtube","linkedin","telegram","flipkart","phonepe","paytm","gpay","airtel","jio","sbi","onlinesbi","hdfc","hdfcbank","icici","icicibank","axis","axisbank","kotak","pnb","irctc","uidai","aadhaar","epfo","incometax","fedex","dhl","dtdc","binance","coinbase"];
@@ -63,6 +65,10 @@ const SLD=["co","com","org","net","gov","ac","edu"];
 const LEET={"0":"o","1":"l","3":"e","4":"a","5":"s","7":"t","$":"s"};
 const $=id=>document.getElementById(id);
 const bad=m=>({verdict:"invalid",score:0,reasons:[m]});
+
+/* Known-malware database (threats.json, updated daily by GitHub Actions) */
+const DB={d:[],i:[]};
+const dbReady=fetch("threats.json",{cache:"no-cache"}).then(r=>r.json()).then(j=>{DB.d=j.blockedDomains||[];DB.i=j.blockedIPs||[]}).catch(()=>{});
 
 function reg(host){const p=host.split(".");
   if(p.length>=3&&SLD.includes(p[p.length-2])&&p[p.length-1].length===2)return p.slice(-3).join(".");
@@ -105,6 +111,7 @@ function analyze(raw){
   const host=u.hostname.toLowerCase().replace(/^\[|\]$/g,"").replace(/\.+$/,"");
   if(!host||(!host.includes(".")&&!isIP(host)))return bad("That doesn’t look like a valid link.");
   const full=dec(raw).toLowerCase(),tld=host.split(".").pop(),r=reg(host),off=isOfficial(r);
+  if(onList(host,DB.d)||DB.i.includes(host))add(100,"Listed in the abuse.ch URLhaus database of known malware sites. Do not open it.");
   if(u.protocol!=="https:")add(10,"Not encrypted: the link uses "+u.protocol.replace(":","")+" instead of https.");
   if(isIP(host)){add(30,"Uses a raw IP address instead of a website name.");
     if(!host.includes(":")&&rawHost!==host)add(20,"The IP address is written in a disguised form.")}
@@ -135,8 +142,9 @@ function analyze(raw){
 }
 
 const label={safe:"Low risk",suspicious:"Suspicious",danger:"Dangerous",invalid:"Can’t check this"};
-function run(){
+async function run(){
   const v=$("u").value;
+  await dbReady;
   $("out").style.display="block";
   const d=analyze(v);
   $("v").textContent=label[d.verdict]+(d.verdict==="invalid"?"":" ("+d.score+"/100)");
